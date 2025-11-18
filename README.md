@@ -1,3 +1,11 @@
+<!-- MathJax for LaTeX rendering -->
+<script type="text/javascript" async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
+
+
+
+
 [Updated on 2021-09-19: Highly recommend this blog post on score-based generative modeling by Yang Song (author of several key papers in the references)].\\
 [Updated on 2022-08-27: Added classifier-free guidance, GLIDE, unCLIP and Imagen.]\\
 [Updated on 2022-08-31: Added latent diffusion model.]\\
