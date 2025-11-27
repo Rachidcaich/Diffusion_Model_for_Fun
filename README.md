@@ -139,32 +139,6 @@ $$
 \bar{\epsilon}_{\theta}(\mathbf{x}_t,t,y) = \epsilon_{\theta}(\mathbf{x}_t,t,y) - \sqrt{1 - \bar{\alpha}_t}\, w \nabla_{\mathbf{x}_t}\log p(y|\mathbf{x}_t) = (w+1)\epsilon_{\theta}(\mathbf{x}_t,t,y) - w\epsilon_{\theta}(\mathbf{x}_t,t)
 $$
 
----
-
-## Speeding up diffusion sampling
-
-### DDIM
-
-$$
-q_\sigma(\mathbf{x}_{t-1}\mid\mathbf{x}_t,\mathbf{x}_0),
-\qquad
-\sigma_t^2 = \eta,\tilde{\beta}_t.
-$$
-
----
-
-## Latent diffusion
-
-Encoder & decoder:
-
-$$
-\mathbf{x}\in\mathbb{R}^{H\times W\times 3}
-\ \xrightarrow{\mathcal{E}}
-\mathbf{z}\in\mathbb{R}^{h\times w\times c}
-\ \xrightarrow{\mathcal{D}}
-\mathbf{x}.
-$$
 
 
 
-Would you like a clean final README output? 📄🚀
