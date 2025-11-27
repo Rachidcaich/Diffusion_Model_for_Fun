@@ -120,10 +120,7 @@ $$
 Noise is modified using classifier gradient:
 
 $$
-\bar{\boldsymbol{\epsilon}}_\theta(\mathbf{x}*t,t)
-= \boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t)
-
-* \sqrt{1-\bar{\alpha}*t},w,\nabla*{\mathbf{x}*t}\log f*\phi(y\mid\mathbf{x}_t).
+\bar{\boldsymbol{\epsilon}}_\theta(\mathbf{x}*t,t) = \boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t)  \sqrt{1-\bar{\alpha}*t},w,\nabla*{\mathbf{x}*t}\log f*\phi(y\mid\mathbf{x}_t).
   $$
 
 ---
