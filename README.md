@@ -4,10 +4,6 @@
 
 Generative models aim to learn the underlying data distribution and sample new data from it. Popular approaches such as generative adversarial networks (GANs), variational auto-encoders (VAEs) and flow-based models each have strengths and weaknesses: GANs rely on adversarial training, VAEs optimize a surrogate loss and flow models need reversible transformations. Diffusion models are a newer class of generative models inspired by non-equilibrium thermodynamics. They define a Markov chain that gradually adds Gaussian noise to data and then learn to reverse that diffusion process to recover the original data. Because the latent variable has the **same dimensionality as the data**, diffusion models offer a flexible yet tractable way to model complex data distributions.
 
-The figure below summarizes where diffusion models sit relative to GANs, VAEs and flow-based models. In GANs, a discriminator tries to distinguish real and synthetic samples while a generator learns to fool it. VAEs use an encoder–decoder pair to maximize a variational lower bound. Flow-based models learn an invertible transformation between data and latent variables. Diffusion models, in contrast, repeatedly corrupt a data point with Gaussian noise and then learn to reverse the noise process back to a sample.
-
-![Comparative overview of generative models]({{file\:file-6DMnKfiDZrYVZsvvqCBDq3}})
-
 ---
 
 ## Forward diffusion process
