@@ -2,6 +2,15 @@
 
 # Pytorch-stable-diffusion
 
+PyTorch implementation of Stable Diffusion from scratch
+
+Download weights and tokenizer files:
+
+- Download vocab.json and merges.txt from [https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/tree/main/tokenizer](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/tree/main/tokenizer) and save them in the data folder
+- Download v1-5-pruned-emaonly.ckpt from [https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/tree/main](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/tree/main) and save it in the data folder
+
+
+
 Generative models aim to learn the underlying data distribution and sample new data from it. Popular approaches such as generative adversarial networks (GANs), variational auto-encoders (VAEs) and flow-based models each have strengths and weaknesses: GANs rely on adversarial training, VAEs optimize a surrogate loss and flow models need reversible transformations. Diffusion models are a newer class of generative models inspired by non-equilibrium thermodynamics. They define a Markov chain that gradually adds Gaussian noise to data and then learn to reverse that diffusion process to recover the original data. Because the latent variable has the **same dimensionality as the data**, diffusion models offer a flexible yet tractable way to model complex data distributions.
 
 ---
