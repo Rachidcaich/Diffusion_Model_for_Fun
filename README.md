@@ -39,9 +39,9 @@ When the step size $\delta$ is small and the number of steps large, the sample c
 While the forward process is fixed, sampling requires reversing the chain to recover $x_0$ from isotropic noise $x_T$. To do so, we would ideally sample from the true reverse conditional $q(x_{t-1}\mid x_t)$. Unfortunately this distribution depends on the entire dataset and is intractable. Diffusion models instead train a neural network $p_\theta$ to approximate it. The reverse process is modeled as:
 
 $$
-p_\theta(x_{0:T}) = p(x_T),\prod_{t=1}^T p_\theta(x_{t-1}\mid x_t),
+p_\theta(x_{0:T}) = p(x_T).\prod_{t=1}^T p_\theta(x_{t-1}\mid x_t),
 \qquad
-p_\theta(x_{t-1}\mid x_t) = \mathcal{N}\bigl(\boldsymbol{\mu}_\theta(x_t,t),;\boldsymbol{\Sigma}_\theta(x_t,t)\bigr).
+p_\theta(x_{t-1}\mid x_t) = \mathcal{N}\bigl(\boldsymbol{\mu}_\theta(x_t,t),\boldsymbol{\Sigma}_\theta(x_t,t)\bigr).
 $$
 
 Because the true conditional $q(x_{t-1}\mid x_t,x_0)$ is tractable for fixed $x_0$, it can be written as a Gaussian with mean $\tilde{\boldsymbol{\mu}}_t(x_t,x_0)$ and variance $\tilde{\beta}_t$. These parameters involve the forward variance schedule $\beta_t$, cumulative product $\bar{\alpha}_t$ and the injected noise at step $t$. The goal of training is to make $p_\theta(x_{t-1}\mid x_t)$ match the true reverse conditional.
