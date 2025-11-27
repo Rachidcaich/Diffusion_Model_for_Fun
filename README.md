@@ -12,7 +12,7 @@ The figure below summarizes where diffusion models sit relative to GANs, VAEs an
 
 ## Forward diffusion process
 
-Given a data sample $\mathbf{x}*0$ drawn from the true data distribution $q(\mathbf{x})$, the forward diffusion process adds a small amount of Gaussian noise in $T$ discrete steps. Each step produces a noisy sample $\mathbf{x}*t$ from the previous sample $\mathbf{x}*{t-1}$ using a variance schedule ${\beta_t \in (0,1)}*{t=1}^T$:
+Given a data sample $\mathbf{x}_0$ drawn from the true data distribution $q(\mathbf{x})$, the forward diffusion process adds a small amount of Gaussian noise in $T$ discrete steps. Each step produces a noisy sample $\mathbf{x}*t$ from the previous sample $\mathbf{x}*{t-1}$ using a variance schedule ${\beta_t \in (0,1)}*{t=1}^T$:
 
 $$
 q(\mathbf{x}*t \mid \mathbf{x}*{t-1}) = \mathcal{N}\bigl(\sqrt{1-\beta_t},\mathbf{x}*{t-1},; \beta_t\mathbf{I}\bigr),
