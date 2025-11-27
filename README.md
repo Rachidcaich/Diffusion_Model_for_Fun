@@ -89,7 +89,7 @@ Ho et al. use a linear schedule from $\beta_1 = 10^{-4}$ to $\beta_T = 0.02$.
 Nichol & Dhariwal propose a cosine schedule:
 
 $$
-\beta_t = \text{clip}\Bigl(1 - \frac{\bar{\alpha}_t}{\bar{\alpha}_{t-1}},,0.999\Bigr),
+\beta_t = \text{clip}\Bigl(1 - \frac{\bar{\alpha}_t}{\bar{\alpha}_{t-1}},0.999\Bigr),
 \qquad
 \bar{\alpha}_t \propto \cos^2\Bigl(\frac{t/T+s}{1+s}\frac{\pi}{2}\Bigr).
 $$
