@@ -1,290 +1,150 @@
-<!-- MathJax for LaTeX rendering -->
-<script type="text/javascript" async
-  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-</script>
 
 
+## Introduction
 
+Generative models aim to learn the underlying data distribution and sample new data from it.  Popular approaches such as generative adversarial networks (GANs), variational auto‑encoders (VAEs) and flow‑based models each have strengths and weaknesses: GANs rely on adversarial training, VAEs optimize a surrogate loss and flow models need reversible transformations.  Diffusion models are a newer class of generative models inspired by non‑equilibrium thermodynamics.  They define a Markov chain that gradually adds Gaussian noise to data and then learn to reverse that diffusion process to recover the original data.  Because the latent variable has the same dimensionality as the data, diffusion models offer a flexible yet tractable way to model complex data distributions.
 
-[Updated on 2021-09-19: Highly recommend this blog post on score-based generative modeling by Yang Song (author of several key papers in the references)].\\
-[Updated on 2022-08-27: Added classifier-free guidance, GLIDE, unCLIP and Imagen.]\\
-[Updated on 2022-08-31: Added latent diffusion model.]\\
-[Updated on 2024-04-13: Added progressive distillation, consistency models, and the Model Architecture section.]
-\end{abstract}
+The figure below summarizes where diffusion models sit relative to GANs, VAEs and flow‑based models.  In GANs, a discriminator tries to distinguish real and synthetic samples while a generator learns to fool it.  VAEs use an encoder–decoder pair to maximize a variational lower bound.  Flow‑based models learn an invertible transformation between data and latent variables.  Diffusion models, in contrast, repeatedly corrupt a data point with Gaussian noise and then learn to reverse the noise process back to a sample.
 
-\section{Introduction}
+![Comparative overview of generative models]({{file\:file-6DMnKfiDZrYVZsvvqCBDq3}})
 
-So far, I’ve written about three types of generative models: GANs, VAEs, and flow-based models. They have shown great success in generating high-quality samples, but each has some limitations of its own. GAN models are known for potentially unstable training and less diversity in generation due to their adversarial training nature. VAEs rely on a surrogate loss. Flow models have to use specialized architectures to construct reversible transforms.
+## Forward diffusion process
 
-Diffusion models are inspired by non-equilibrium thermodynamics. They define a Markov chain of diffusion steps to slowly add random noise to data and then learn to reverse the diffusion process to construct desired data samples from the noise. Unlike VAEs or flow models, diffusion models are learned with a fixed procedure and the latent variable has high dimensionality (same as the original data).
+Given a data sample (\mathbf{x}*0) drawn from the true data distribution (q(\mathbf{x})), the forward diffusion process adds a small amount of Gaussian noise in (T) discrete steps.  Each step produces a noisy sample (\mathbf{x}*t) from the previous sample (\mathbf{x}*{t-1}) using a variance schedule ({\beta_t \in (0,1)}*{t=1}^T):
 
-Several diffusion-based generative models have been proposed with similar ideas underneath, including diffusion probabilistic models~\cite{sohl2015deep}, noise-conditioned score networks (NCSN;~\cite{song2019generative}), and denoising diffusion probabilistic models (DDPM;~\cite{ho2020denoising}).
+[
+q(\mathbf{x}*t\vert\mathbf{x}*{t-1}) = \mathcal{N}\bigl(\sqrt{1-\beta_t},\mathbf{x}*{t-1},; \beta_t\mathbf{I}\bigr),
+\quad q(\mathbf{x}*{1:T}\vert\mathbf{x}*0) = \prod*{t=1}^T q(\mathbf{x}*t\vert\mathbf{x}*{t-1}).
+]
 
-\section{Forward Diffusion Process}
+As noise is repeatedly added, the sample loses its structure; in the limit (T \to \infty), the distribution (\mathbf{x}_T) approaches an isotropic Gaussian.  A useful property is that one can sample (\mathbf{x}_t) in closed form directly from (\mathbf{x}_0) using the cumulative product (\bar{\alpha}*t = \prod*{i=1}^t (1 - \beta_i)).  The resulting marginal distribution is Gaussian with mean (\sqrt{\bar{\alpha}_t},\mathbf{x}_0) and variance ((1-\bar{\alpha}_t)\mathbf{I}).  This closed‑form formula enables efficient forward simulation.
 
-Given a data point sampled from a real data distribution
-\[
-\mathbf{x}_0 \sim q(\mathbf{x}),
-\]
-we define a forward diffusion process in which we add a small amount of Gaussian noise to the sample in $T$ steps, producing a sequence of noisy samples
-\[
-\mathbf{x}_1, \dots, \mathbf{x}_T.
-\]
-The step sizes are controlled by a variance schedule
-\[
-\{\beta_t \in (0, 1)\}_{t=1}^T.
-\]
+The connection to stochastic gradient Langevin dynamics (SGLD) is instructive.  SGLD samples from a probability density (p(\mathbf{x})) by taking stochastic gradient steps and injecting Gaussian noise: (\mathbf{x}*t = \mathbf{x}*{t-1} + \tfrac{\delta}{2}\nabla_{\mathbf{x}}\log p(\mathbf{x}_{t-1}) + \sqrt{\delta},\boldsymbol{\epsilon}_t).  When the step size (\delta) is small and the number of steps large, the sample converges to the true density.  Diffusion models can be viewed as learning to reverse such a stochastic process.
 
-We define
-\begin{align}
-q(\mathbf{x}_t \vert \mathbf{x}_{t-1})
-  &= \mathcal{N}\bigl(\mathbf{x}_t;\, \sqrt{1 - \beta_t}\,\mathbf{x}_{t-1},\, \beta_t \mathbf{I}\bigr), \\
-q(\mathbf{x}_{1:T} \vert \mathbf{x}_0)
-  &= \prod_{t=1}^T q(\mathbf{x}_t \vert \mathbf{x}_{t-1}).
-\end{align}
+## Reverse diffusion and training
 
-As $t$ increases, the sample $\mathbf{x}_t$ gradually loses its distinguishable features. Eventually, when $T \to \infty$, $\mathbf{x}_T$ becomes equivalent to an isotropic Gaussian distribution.
+### Reverse process
 
-\subsection{Closed-form Sampling at Arbitrary Timestep}
+While the forward process is fixed, sampling requires reversing the chain to recover (\mathbf{x}_0) from isotropic noise (\mathbf{x}*T).  To do so, we would ideally sample from the true reverse conditional (q(\mathbf{x}*{t-1}\vert\mathbf{x}*t)).  Unfortunately this distribution depends on the entire dataset and is intractable.  Diffusion models instead train a neural network (p*\theta) to approximate it.  The reverse process is modeled as
 
-A nice property of the above process is that we can sample $\mathbf{x}_t$ at any arbitrary timestep $t$ in closed form using the reparameterization trick. Let
-\[
-\alpha_t = 1 - \beta_t,\qquad
-\bar{\alpha}_t = \prod_{i=1}^t \alpha_i.
-\]
+[
+p_\theta(\mathbf{x}*{0:T}) = p(\mathbf{x}*T),\prod*{t=1}^T p*\theta(\mathbf{x}*{t-1}\vert\mathbf{x}*t),
+\quad p*\theta(\mathbf{x}*{t-1}\vert\mathbf{x}*t) = \mathcal{N}\bigl(\boldsymbol{\mu}*\theta(\mathbf{x}*t,t),;\boldsymbol{\Sigma}*\theta(\mathbf{x}_t,t)\bigr)
+.
+]
 
-We can unroll the Markov chain:
-\begin{align}
-\mathbf{x}_t
-  &= \sqrt{\alpha_t}\,\mathbf{x}_{t-1}
-     + \sqrt{1 - \alpha_t}\,\bm{\epsilon}_{t-1},
-     &&\text{where }\bm{\epsilon}_{t-1} \sim \mathcal{N}(\mathbf{0}, \mathbf{I}) \\
-  &= \sqrt{\alpha_t \alpha_{t-1}}\,\mathbf{x}_{t-2}
-     + \sqrt{1 - \alpha_t \alpha_{t-1}}\,\bar{\bm{\epsilon}}_{t-2}
-     &&\text{($\bar{\bm{\epsilon}}_{t-2}$ merges two Gaussians)} \\
-  &\;\dots \\
-  &= \sqrt{\bar{\alpha}_t}\,\mathbf{x}_0
-     + \sqrt{1 - \bar{\alpha}_t}\,\bm{\epsilon},
-\end{align}
-where $\bm{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$. Therefore,
-\begin{equation}
-q(\mathbf{x}_t \vert \mathbf{x}_0)
-  = \mathcal{N}\bigl(\mathbf{x}_t;\, \sqrt{\bar{\alpha}_t}\,\mathbf{x}_0,\,
-                     (1 - \bar{\alpha}_t)\mathbf{I}\bigr).
-\end{equation}
+Because the true conditional (q(\mathbf{x}_{t-1}\vert\mathbf{x}_t,\mathbf{x}_0)) is tractable for fixed (\mathbf{x}_0), it can be written as a Gaussian with mean (\tilde{\boldsymbol{\mu}}_t(\mathbf{x}_t,\mathbf{x}_0)) and variance (\tilde{\beta}*t).  These parameters involve the forward variance schedule (\beta_t), cumulative product (\bar{\alpha}*t) and the noise at step (t).  The goal of training is to make (p*\theta(\mathbf{x}*{t-1}\vert\mathbf{x}_t)) match this true reverse conditional.
 
-\paragraph{Merging Gaussians.}
-Recall that when we merge two Gaussians with different variances,
-\[
-\mathcal{N}(\mathbf{0}, \sigma_1^2 \mathbf{I}) \quad\text{and}\quad
-\mathcal{N}(\mathbf{0}, \sigma_2^2 \mathbf{I}),
-\]
-the result is
-\[
-\mathcal{N}\bigl(\mathbf{0}, (\sigma_1^2 + \sigma_2^2)\mathbf{I}\bigr).
-\]
-Here the merged standard deviation is
-\[
-\sqrt{(1 - \alpha_t) + \alpha_t(1-\alpha_{t-1})}
-  = \sqrt{1 - \alpha_t \alpha_{t-1}}.
-\]
+### Parameterizing the training objective
 
-Usually, we can afford a larger update step when the sample gets noisier, so
-\[
-\beta_1 < \beta_2 < \dots < \beta_T
-\quad\Longrightarrow\quad
-\bar{\alpha}_1 > \bar{\alpha}_2 > \dots > \bar{\alpha}_T.
-\]
+The network learns to predict the mean of the reverse process by predicting the noise added at each step.  Rewriting the true mean yields
 
-\section{Connection with Stochastic Gradient Langevin Dynamics}
+[
+\tilde{\boldsymbol{\mu}}_t = \frac{1}{\sqrt{\alpha_t}}\Bigl(\mathbf{x}_t - \frac{1-\alpha_t}{\sqrt{1-\bar{\alpha}_t}},\boldsymbol{\epsilon}_t\Bigr).
+]
 
-Langevin dynamics is a concept from physics, developed for statistically modeling molecular systems. Combined with stochastic gradient descent, stochastic gradient Langevin dynamics (SGLD;~\cite{welling2011bayesian}) can produce samples from a probability density $p(\mathbf{x})$ using only the gradients $\nabla_{\mathbf{x}} \log p(\mathbf{x})$ in a Markov chain of updates:
-\begin{equation}
-\mathbf{x}_t
-  = \mathbf{x}_{t-1} + \frac{\delta}{2}
-    \nabla_{\mathbf{x}} \log p(\mathbf{x}_{t-1})
-    + \sqrt{\delta}\,\bm{\epsilon}_t,
-\quad \bm{\epsilon}_t \sim \mathcal{N}(\mathbf{0}, \mathbf{I}),
-\end{equation}
-where $\delta$ is the step size. When $T \to \infty$ and $\delta \to 0$, the distribution of $\mathbf{x}_T$ converges to the true density $p(\mathbf{x})$.
+Instead of directly predicting (\tilde{\boldsymbol{\mu}}*t), we train (\boldsymbol{\mu}*\theta) to output a prediction of the noise (\boldsymbol{\epsilon}_t).  The parameterization becomes
 
-Compared to standard SGD, SGLD injects Gaussian noise into the parameter updates to avoid collapsing into local minima.
+[
+\boldsymbol{\mu}_\theta(\mathbf{x}_t,t) = \frac{1}{\sqrt{\alpha_t}}\Bigl(\mathbf{x}_t - \frac{1-\alpha_t}{\sqrt{1-\bar{\alpha}*t}},\boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t)\Bigr).
+]
 
-\section{Reverse Diffusion Process}
+The training loss at step (t), derived from the variational lower bound, is the expected squared error between the true and predicted mean scaled by the variance of the reverse distribution.  Simplifying and ignoring weighting yields the commonly used “simple” objective
 
-If we can reverse the forward diffusion process and sample from $q(\mathbf{x}_{t-1} \vert \mathbf{x}_t)$, we would be able to recreate the true sample from a Gaussian noise input $\mathbf{x}_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$.
+[
+L_{\text{simple}} = \mathbb{E}_{t,\mathbf{x}_0,\boldsymbol{\epsilon}_t}\bigl[|\boldsymbol{\epsilon}*t - \boldsymbol{\epsilon}*\theta(\sqrt{\bar{\alpha}_t},\mathbf{x}_0 + \sqrt{1-\bar{\alpha}_t},\boldsymbol{\epsilon}_t, t)|^2\bigr].
+]
 
-If $\beta_t$ is small enough, $q(\mathbf{x}_{t-1} \vert \mathbf{x}_t)$ is also Gaussian. Unfortunately, we cannot easily estimate $q(\mathbf{x}_{t-1} \vert \mathbf{x}_t)$ because it depends on the entire dataset. Therefore we learn a model $p_\theta$ to approximate these conditional probabilities in order to run the reverse diffusion process:
-\begin{align}
-p_\theta(\mathbf{x}_{0:T})
-  &= p(\mathbf{x}_T) \prod_{t=1}^T p_\theta(\mathbf{x}_{t-1} \vert \mathbf{x}_t), \\
-p_\theta(\mathbf{x}_{t-1} \vert \mathbf{x}_t)
-  &= \mathcal{N}\bigl(\mathbf{x}_{t-1};
-                      \bm{\mu}_\theta(\mathbf{x}_t, t),
-                      \bm{\Sigma}_\theta(\mathbf{x}_t, t)\bigr).
-\end{align}
+Empirically, this simplified loss leads to stable and effective training.  The network is thus trained to denoise a noisy input and predict the injected noise, encouraging it to reverse the forward diffusion.
 
-It is noteworthy that the reverse conditional probability is tractable when conditioned on $\mathbf{x}_0$:
-\begin{equation}
-q(\mathbf{x}_{t-1} \vert \mathbf{x}_t, \mathbf{x}_0)
-  = \mathcal{N}\bigl(\mathbf{x}_{t-1};
-                     \tilde{\bm{\mu}}(\mathbf{x}_t, \mathbf{x}_0),
-                     \tilde{\beta}_t \mathbf{I}\bigr).
-\end{equation}
+### Noise‑conditioned score networks
 
-Using Bayes' rule, we can derive
-\begin{align}
-q(\mathbf{x}_{t-1} \vert \mathbf{x}_t, \mathbf{x}_0)
-  &= q(\mathbf{x}_t \vert \mathbf{x}_{t-1}, \mathbf{x}_0)
-     \frac{q(\mathbf{x}_{t-1} \vert \mathbf{x}_0)}
-          {q(\mathbf{x}_t \vert \mathbf{x}_0)} \\
-  &\propto \exp\Big(-\frac{1}{2}\big(
-    \frac{(\mathbf{x}_t - \sqrt{\alpha_t}\,\mathbf{x}_{t-1})^2}{\beta_t}
-    + \frac{(\mathbf{x}_{t-1} - \sqrt{\bar{\alpha}_{t-1}}\mathbf{x}_0)^2}
-           {1-\bar{\alpha}_{t-1}}
-    - \frac{(\mathbf{x}_t - \sqrt{\bar{\alpha}_t}\mathbf{x}_0)^2}
-           {1-\bar{\alpha}_t}
-  \big)\Big).
-\end{align}
+Song and Ermon proposed an alternative score‑based generative model that estimates the score (\nabla_{\mathbf{x}}\log q(\mathbf{x}_t)) of the perturbed data distribution and samples via Langevin dynamics.  To stabilize score estimation, they add noise at multiple levels so that perturbed data covers the full space and train a noise‑conditioned score network jointly across noise levels.  In diffusion notation, the score network approximates
 
-By collecting terms in $\mathbf{x}_{t-1}^2$ and $\mathbf{x}_{t-1}$ and matching to the standard Gaussian form, we obtain
-\begin{align}
-\tilde{\beta}_t
-  &= \frac{1 - \bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t}\,\beta_t, \\
-\tilde{\bm{\mu}}_t(\mathbf{x}_t, \mathbf{x}_0)
-  &= \frac{\sqrt{\alpha_t}(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t}\,\mathbf{x}_t
-   + \frac{\sqrt{\bar{\alpha}_{t-1}}\,\beta_t}{1 - \bar{\alpha}_t}\,\mathbf{x}_0.
-\end{align}
+[
+\mathbf{s}_\theta(\mathbf{x}*t,t) \approx \nabla*{\mathbf{x}_t}\log q(\mathbf{x}*t) = -\frac{\boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t)}{\sqrt{1-\bar{\alpha}_t}}.
+]
 
-Using the reparameterization
-\[
-\mathbf{x}_t
-  = \sqrt{\bar{\alpha}_t}\,\mathbf{x}_0
-    + \sqrt{1 - \bar{\alpha}_t}\,\bm{\epsilon}_t,
-\]
-we can also express the mean as
-\begin{equation}
-\tilde{\bm{\mu}}_t
-  = \frac{1}{\sqrt{\alpha_t}}
-    \Bigl(\mathbf{x}_t
-          - \frac{1-\alpha_t}{\sqrt{1-\bar{\alpha}_t}}\,
-            \bm{\epsilon}_t\Bigr).
-\end{equation}
+This connection shows that diffusion models and score‑based models are closely related; both learn to estimate the gradient of the data density at different noise scales.
 
-\section{Variational Lower Bound}
+## Variance schedules and parameterization
 
-The diffusion setup is very similar to a VAE, so we can use a variational lower bound to optimize the negative log-likelihood:
-\begin{align}
-- \log p_\theta(\mathbf{x}_0)
-  &\le - \log p_\theta(\mathbf{x}_0)
-        + D_{\mathrm{KL}}\bigl(
-          q(\mathbf{x}_{1:T}\vert\mathbf{x}_0)
-          \,\|\, p_\theta(\mathbf{x}_{1:T}\vert\mathbf{x}_0)
-        \bigr) \\
-  &= \mathbb{E}_{q(\mathbf{x}_{0:T})} \Bigl[
-      \log \frac{q(\mathbf{x}_{1:T}\vert \mathbf{x}_0)}
-                {p_\theta(\mathbf{x}_{0:T})}
-     \Bigr]
-   =: L_{\mathrm{VLB}}.
-\end{align}
+### Choosing the noise schedule (\beta_t)
 
-This can be decomposed into a sum of KL terms:
-\begin{align}
-L_{\mathrm{VLB}}
-  &= \mathbb{E}_q\Bigl[
-       D_{\mathrm{KL}}\bigl(
-         q(\mathbf{x}_T \vert \mathbf{x}_0)
-         \,\|\, p_\theta(\mathbf{x}_T)
-       \bigr)
-       + \sum_{t=2}^T
-         D_{\mathrm{KL}}\bigl(
-           q(\mathbf{x}_{t-1} \vert \mathbf{x}_t, \mathbf{x}_0)
-           \,\|\, p_\theta(\mathbf{x}_{t-1} \vert \mathbf{x}_t)
-         \bigr)
-       - \log p_\theta(\mathbf{x}_0 \vert \mathbf{x}_1)
-     \Bigr] \\
-  &= \mathbb{E}_q\Bigl[
-       L_T + \sum_{t=1}^{T-1} L_t + L_0
-     \Bigr],
-\end{align}
-where
-\begin{align}
-L_T &= D_{\mathrm{KL}}\bigl(
-         q(\mathbf{x}_T \vert \mathbf{x}_0)
-         \,\|\, p_\theta(\mathbf{x}_T)
-       \bigr), \\
-L_t &= D_{\mathrm{KL}}\bigl(
-         q(\mathbf{x}_t \vert \mathbf{x}_{t+1}, \mathbf{x}_0)
-         \,\|\, p_\theta(\mathbf{x}_t \vert \mathbf{x}_{t+1})
-       \bigr),\qquad 1 \le t \le T-1, \\
-L_0 &= -\log p_\theta(\mathbf{x}_0 \vert \mathbf{x}_1).
-\end{align}
+The forward variance schedule (\beta_t) determines how much noise is added at each step.  Ho et al. proposed using a linear schedule from (\beta_1=10^{-4}) to (\beta_T=0.02).  Nichol & Dhariwal observed that this choice does not optimize likelihood well and introduced a cosine schedule defined by (\beta_t = \text{clip}\bigl(1 - \tfrac{\bar{\alpha}*t}{\bar{\alpha}*{t-1}}, 0.999\bigr)) with (\bar{\alpha}_t\propto \cos^2\bigl(\tfrac{t/T+s}{1+s},\tfrac{\pi}{2}\bigr)).  The cosine schedule provides a near‑linear drop in the middle of training and subtle changes near the ends, improving sample quality.
 
-Every KL term (except $L_0$) compares two Gaussians and thus can be computed in closed form. $L_T$ is constant w.r.t.\ $\theta$ and can be ignored during training.
+### Reverse process variance (\boldsymbol{\Sigma}_\theta)
 
-\section{Parameterization of the Training Loss}
+Originally, DDPM fixes the reverse variance (\boldsymbol{\Sigma}_\theta) to a constant diagonal matrix based on (\beta_t) or (\tilde{\beta}*t = \frac{1-\bar{\alpha}*{t-1}}{1-\bar{\alpha}*t},\beta_t).  Learning a diagonal covariance leads to unstable training.  Nichol & Dhariwal proposed learning (\boldsymbol{\Sigma}*\theta) via an interpolation between (\beta_t) and (\tilde{\beta}*t): (\boldsymbol{\Sigma}*\theta(\mathbf{x}_t,t) = \exp\bigl(\mathbf{v}\log \beta_t + (1-\mathbf{v})\log \tilde{\beta}_t\bigr)) where (\mathbf{v}) is predicted by the model.  They train this variance using a hybrid objective combining the simple objective and a variational bound term weighted by a small (\lambda), and apply time‑averaging with importance sampling to stabilize optimisation.
 
-We approximate the reverse conditionals with a neural network:
-\[
-p_\theta(\mathbf{x}_{t-1} \vert \mathbf{x}_t)
-  = \mathcal{N}\bigl(
-      \mathbf{x}_{t-1};
-      \bm{\mu}_\theta(\mathbf{x}_t, t),
-      \bm{\Sigma}_\theta(\mathbf{x}_t, t)
-    \bigr).
-\]
+## Conditioned generation
 
-We would like $\bm{\mu}_\theta$ to match $\tilde{\bm{\mu}}_t$, and because $\mathbf{x}_t$ is available at training time, it is convenient to let the network predict the noise $\bm{\epsilon}_t$ instead:
-\begin{equation}
-\bm{\mu}_\theta(\mathbf{x}_t, t)
-  = \frac{1}{\sqrt{\alpha_t}}
-    \Bigl(\mathbf{x}_t
-          - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}}
-            \bm{\epsilon}_\theta(\mathbf{x}_t, t)
-    \Bigr).
-\end{equation}
+Diffusion models can generate images conditioned on class labels or descriptive text.  Two principal methods have emerged.
 
-Then
-\[
-\mathbf{x}_t
-  = \sqrt{\bar{\alpha}_t}\,\mathbf{x}_0
-    + \sqrt{1-\bar{\alpha}_t}\,\bm{\epsilon}_t,
-\]
-and the loss term $L_t$ becomes
-\begin{align}
-L_t
-  &= \mathbb{E}_{\mathbf{x}_0,\,\bm{\epsilon}}\Bigl[
-       \frac{(1-\alpha_t)^2}
-            {2\alpha_t (1-\bar{\alpha}_t)\|\bm{\Sigma}_\theta\|_2^2}
-       \,\bigl\|\bm{\epsilon}_t
-                - \bm{\epsilon}_\theta(\mathbf{x}_t, t)
-         \bigr\|^2
-     \Bigr] \\
-  &= \mathbb{E}_{\mathbf{x}_0,\,\bm{\epsilon}}\Bigl[
-       \lambda_t\,
-       \bigl\|\bm{\epsilon}_t
-              - \bm{\epsilon}_\theta(
-                  \sqrt{\bar{\alpha}_t}\,\mathbf{x}_0
-                  + \sqrt{1-\bar{\alpha}_t}\,\bm{\epsilon}_t,\; t
-                )
-       \bigr\|^2
-     \Bigr],
-\end{align}
-for some scalar weighting $\lambda_t$.
+### Classifier‑guided diffusion
 
-\subsection{Simplified Objective}
+Dhariwal & Nichol train a separate classifier (f_\phi(y\vert\mathbf{x}*t,t)) on noisy data and use its gradient (\nabla*{\mathbf{x}*t}\log f*\phi(y\vert\mathbf{x}*t)) to guide the reverse process towards a target label.  The joint score (\nabla*{\mathbf{x}_t}\log q(\mathbf{x}_t,y)) combines the unconditional score and the classifier gradient, resulting in a modified noise prediction
 
-Empirically, Ho et al.~\cite{ho2020denoising} found that training works better with a simplified objective that ignores the weighting term:
-\begin{equation}
-L_t^{\text{simple}}
-  = \mathbb{E}_{t,\,\mathbf{x}_0,\,\bm{\epsilon}}\Bigl[
-      \bigl\|\bm{\epsilon}_t
-             - \bm{\epsilon}_\theta(\mathbf{x}_t, t)
-      \bigr\|^2
-    \Bigr],
-\end{equation}
-so that the final training loss is simply
-\begin{equation}
-L_{\text{simple}} = L_t^{\text{simple}} + C,
-\end{equation}
-where $C$ is a constant independent of $\theta$.
+[
+\bar{\boldsymbol{\epsilon}}_\theta(\mathbf{x}*t,t) = \boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t) - \sqrt{1-\bar{\alpha}*t}, w \nabla*{\mathbf{x}*t}\log f*\phi(y\vert\mathbf{x}_t),
+]
+
+where (w) controls the strength of the classifier guidance.  This classifier‑guided model, referred to as ADM‑G, achieves state‑of‑the‑art results on image synthesis when combined with architectural improvements like larger U‑Nets, attention modules and BigGAN‑style residual blocks.
+
+### Classifier‑free guidance
+
+Ho & Salimans showed that conditional generation can be performed without a separate classifier.  A single network is trained to produce both unconditional predictions (\boldsymbol{\epsilon}_\theta(\mathbf{x}*t,t)) and conditional predictions (\boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t,y)) by randomly dropping the conditioning information during training.  The implicit classifier gradient can be computed from the difference between conditional and unconditional scores.  The resulting guidance is
+
+[
+\bar{\boldsymbol{\epsilon}}_\theta(\mathbf{x}*t,t,y) = (w+1),\boldsymbol{\epsilon}*\theta(\mathbf{x}*t,t,y) - w,\boldsymbol{\epsilon}*\theta(\mathbf{x}_t,t).
+]
+
+Classifier‑free guidance avoids adversarial effects from an external classifier and has been found to produce a better balance between image diversity and fidelity.  GLIDE and other text‑to‑image diffusion models adopt this strategy and further explore CLIP guidance and cross‑attention for text conditioning.
+
+## Speeding up diffusion sampling
+
+### Fewer sampling steps and DDIM
+
+Generating samples from DDPM requires following a long Markov chain ((T) can be thousands of steps), making inference slow.  Strided sampling schedules take updates every (\lceil T/S \rceil) steps to reduce the chain length.  Song et al. derive a parameterization (q_{\sigma}(\mathbf{x}_{t-1}\vert\mathbf{x}_t,\mathbf{x}_0)) that introduces a tunable standard deviation (\sigma_t).  Setting (\sigma_t^2 = \eta,\tilde{\beta}_t) allows controlling the sampling stochasticity; the special case (\eta = 0) yields the **denoising diffusion implicit model** (DDIM) which follows the same marginal distribution as DDPM but performs deterministic sampling.
+
+With DDIM, one can sample using a subset of timesteps.  Experiments show that DDIM produces higher‑quality samples when the number of sampling steps (S) is small, while DDPM performs better when using the full chain.  DDIM also has a consistency property: samples obtained from the same latent variable share high‑level features and allow semantically meaningful interpolation.
+
+### Progressive distillation and consistency models
+
+Salimans & Ho proposed **progressive distillation**, which distills a deterministic sampler into a new model that uses half the number of sampling steps.  In each iteration, the student model learns to match two teacher steps with one student step; repeated distillation halves the sampling cost while retaining quality.
+
+Consistency models extend this idea by training a network to map any noisy sample (\mathbf{x}*t) along the diffusion trajectory directly to the same origin (\mathbf{x}*\epsilon).  The model outputs must satisfy (f(\mathbf{x}*t,t) = f(\mathbf{x}*{t'},t')) for any (t,t') in the interval.  The parameterization uses time‑dependent skip and output coefficients (c_{\text{skip}}(t)) and (c_{\text{out}}(t)) such that (c_{\text{skip}}(\epsilon)=1) and (c_{\text{out}}(\epsilon)=0).  Two training schemes exist: *consistency distillation*, which distills a pre‑trained diffusion model using pairs of points on the same trajectory, and *consistency training*, which trains from scratch by estimating the score function with an unbiased estimator and using an ODE solver.  Consistency models can generate high‑quality samples in a single or few steps and provide a flexible trade‑off between speed and quality.
+
+## Latent diffusion and scaling to high resolution
+
+### Latent diffusion models
+
+Rombach et al. observed that most bits in an image describe perceptual details; compressing images into a latent space retains semantic content while reducing dimensionality.  **Latent diffusion models (LDMs)** first use an autoencoder with encoder (\mathcal{E}) to compress an image (\mathbf{x}\in\mathbb{R}^{H\times W\times 3}) into a latent representation (\mathbf{z}\in\mathbb{R}^{h\times w\times c}), and a decoder (\mathcal{D}) to reconstruct the image.  Regularization such as KL penalties or vector quantization prevents the latent from having unbounded variance.  The diffusion process runs in the latent space, which greatly reduces training cost and speeds up inference.  A time‑conditioned U‑Net with cross‑attention handles conditioning information (class labels, semantic maps, etc.) by projecting the conditioning input through a domain‑specific encoder and injecting it into the U‑Net via attention.
+
+### Cascaded diffusion and unCLIP
+
+To synthesize high‑resolution images, Ho et al. propose a cascade of multiple diffusion models operating at increasing resolutions.  Strong data augmentation (adding Gaussian noise at low resolution and Gaussian blur at high resolution) to the conditioning inputs helps reduce error propagation across the pipeline.  Truncated and non‑truncated conditioning augmentations modify how the low‑resolution reverse process is corrupted before being fed to a super‑resolution model.
+
+The two‑stage model **unCLIP** leverages a pretrained CLIP text–image encoder.  A prior model produces a CLIP image embedding given a text prompt, and a decoder generates an image conditioned on that embedding.  This decouples text‑to‑image synthesis into a latent prior and a decoder, allowing unCLIP to perform zero‑shot image manipulation and variation.
+
+**Imagen** replaces the CLIP encoder with a large language model (T5‑XXL) to encode text and finds that larger text encoders lead to better image‑text alignment.  Dynamic thresholding clips predictions during sampling to handle train–test mismatch and improve fidelity.  Additional architectural tweaks such as shifting parameters toward low‑resolution blocks and scaling skip connections improve efficiency.
+
+## Model architectures
+
+### U‑Net and ControlNet
+
+Most diffusion models use a U‑Net backbone.  U‑Net consists of a downsampling stack of repeated 3×3 convolutions with ReLU activation and max pooling, followed by an upsampling stack that upsamples feature maps and halves the number of channels.  Skip connections concatenate feature maps from the encoder to the decoder, preserving high‑resolution details.
+
+For conditional generation requiring additional input (e.g., edges, human poses or depth maps), ControlNet augments U‑Net by inserting a trainable copy of each encoder layer and two zero‑initialized 1×1 convolutions.  The original parameters are frozen and the conditioned branch learns to modulate features via the zero convolutions, effectively controlling the generation while protecting the base model from noisy gradients.
+
+### Diffusion Transformer (DiT)
+
+DiT brings Transformer architectures to diffusion models.  It operates on latent patches: the latent representation (\mathbf{z}) is divided into patches and processed by a sequence of Transformer blocks.  Conditioning information such as the timestep (t) or class label (c) is injected via adaptive layer normalization (adaLN‑Zero).  The transformer predicts both the noise and a diagonal covariance and scales efficiently with model size.  Experiments show that scaling DiT models improves generation quality and computational efficiency.
+
+## Quick summary and outlook
+
+Diffusion models strike a balance between tractability and flexibility.  They are analytically tractable and allow exact likelihood evaluation, yet can model rich, high‑dimensional data.  Their main drawback is the cost of sampling: reversing a long Markov chain requires many neural network evaluations.  Research on fast sampling—including DDIM, progressive distillation, consistency models and latent‑space diffusion—makes diffusion models increasingly practical.  Meanwhile, innovations in conditioning (classifier‑free guidance), noise schedules and architectures (U‑Net, ControlNet, DiT) continue to improve sample quality, efficiency and controllability.  Diffusion models have become a central tool for text‑to‑image generation and offer a flexible framework that continues to evolve.
+
+---
+
+> **Note**: The image reference uses a placeholder (`{{file:file-6DMnKfiDZrYVZsvvqCBDq3}}`). In your GitHub repository, you should include the image file (e.g., `generative-overview.png`) and update the image link to its relative path.
