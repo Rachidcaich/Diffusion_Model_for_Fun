@@ -136,9 +136,7 @@ $$
 $$
 
 $$
-\bar{\epsilon}_{\theta}(\mathbf{x}_t,t,y)
-= \epsilon_{\theta}(\mathbf{x}_t,t,y)
-- \sqrt{1 - \bar{\alpha}_t}\, w \nabla_{\mathbf{x}_t}\log p(y|\mathbf{x}_t) = (w+1)\epsilon_{\theta}(\mathbf{x}_t,t,y) - w\epsilon_{\theta}(\mathbf{x}_t,t)
+\bar{\epsilon}_{\theta}(\mathbf{x}_t,t,y) = \epsilon_{\theta}(\mathbf{x}_t,t,y) - \sqrt{1 - \bar{\alpha}_t}\, w \nabla_{\mathbf{x}_t}\log p(y|\mathbf{x}_t) = (w+1)\epsilon_{\theta}(\mathbf{x}_t,t,y) - w\epsilon_{\theta}(\mathbf{x}_t,t)
 $$
 
 ---
