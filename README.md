@@ -130,30 +130,27 @@ $$
 The gradient of an implicit classifier can be expressed using both conditional and unconditional score estimators. After substituting these into the classifier-guided score formulation, the resulting score no longer relies on an external classifier.
 
 $$
-\[
+\begin(aligned)
 \nabla_{\mathbf{x}_t} \log p(y|\mathbf{x}_t)
-= \nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t|y) - \nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)
-\]
-
-\[
+& = \nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t|y) - \nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)
+\\ &
 = -\frac{1}{\sqrt{1 - \bar{\alpha}_t}}
 \left( \epsilon_{\theta}(\mathbf{x}_t,t,y) - \epsilon_{\theta}(\mathbf{x}_t,t) \right)
-\]
+\end(aligned)
+$$
 
-\[
+$$
 \bar{\epsilon}_{\theta}(\mathbf{x}_t,t,y)
 = \epsilon_{\theta}(\mathbf{x}_t,t,y)
 - \sqrt{1 - \bar{\alpha}_t}\, w \nabla_{\mathbf{x}_t}\log p(y|\mathbf{x}_t)
-\]
 
-\[
+
 = \epsilon_{\theta}(\mathbf{x}_t,t,y)
 + w\left(\epsilon_{\theta}(\mathbf{x}_t,t,y) - \epsilon_{\theta}(\mathbf{x}_t,t)\right)
-\]
 
-\[
+
 = (w+1)\epsilon_{\theta}(\mathbf{x}_t,t,y) - w\epsilon_{\theta}(\mathbf{x}_t,t)
-\]
+
 
   $$
 
