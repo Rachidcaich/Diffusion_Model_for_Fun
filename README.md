@@ -138,17 +138,8 @@ $$
 $$
 \bar{\epsilon}_{\theta}(\mathbf{x}_t,t,y)
 = \epsilon_{\theta}(\mathbf{x}_t,t,y)
-- \sqrt{1 - \bar{\alpha}_t}\, w \nabla_{\mathbf{x}_t}\log p(y|\mathbf{x}_t)
-
-
-= \epsilon_{\theta}(\mathbf{x}_t,t,y)
-+ w\left(\epsilon_{\theta}(\mathbf{x}_t,t,y) - \epsilon_{\theta}(\mathbf{x}_t,t)\right)
-
-
-= (w+1)\epsilon_{\theta}(\mathbf{x}_t,t,y) - w\epsilon_{\theta}(\mathbf{x}_t,t)
-
-
-  $$
+- \sqrt{1 - \bar{\alpha}_t}\, w \nabla_{\mathbf{x}_t}\log p(y|\mathbf{x}_t) = (w+1)\epsilon_{\theta}(\mathbf{x}_t,t,y) - w\epsilon_{\theta}(\mathbf{x}_t,t)
+$$
 
 ---
 
